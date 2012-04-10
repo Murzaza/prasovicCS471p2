@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
                &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
     {
 		char mess[56] = "sendto() sent a different number of bytes than expected";
-		DieWithError("sendto() sent a different number of bytes than expected");
+		DieWithError(mess);
   	}
 
     /* Get a response */
@@ -123,12 +123,15 @@ int main(int argc, char *argv[])
                 printf("timed out, %d more tries...\n", MAXTRIES-tries);
                 if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)
                             &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
-                    DieWithError("sendto() failed");
-                alarm(TIMEOUT_SECS);
+                {
+					char mess[17] = "sendto() failed";
+					DieWithError(mess);
+                }
+				alarm(TIMEOUT_SECS);
             } 
             else
             {
-				char mess[10] = "No Response";
+				char mess[12] = "No Response";
 				DieWithError(mess);
 			}
         } 
