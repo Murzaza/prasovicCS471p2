@@ -4,16 +4,11 @@
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
+#include "structs.h"
 
 #define MAXSIZE 4096     /* Longest string to echo */
 
 void DieWithError(char *errorMessage);  /* External error handling function */
-
-struct ack
-{
-	int type;
-	int ackno;
-};
 
 int main(int argc, char *argv[])
 {

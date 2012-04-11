@@ -14,6 +14,7 @@
 #include <errno.h>      /* for errno and EINTR */
 #include <signal.h>     /* for sigaction() */
 #include "buffer.h"     /* Holds the buffer variable of size 4096 */
+#include "structs.h"
 
 #define ECHOMAX         255     /* Longest string to echo */
 #define TIMEOUT_SECS    2       /* Seconds between retransmits */
@@ -26,13 +27,6 @@ int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
 /*
 	The message format to send to receiver.
 */
-struct message
-{
-	int type;
-	int seqno;
-	int length;
-	char data[MAXCHUNK];
-};
 
 void DieWithError(char *errorMessage);   /* Error handling function */
 void CatchAlarm(int ignored);            /* Handler for SIGALRM */
