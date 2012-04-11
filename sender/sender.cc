@@ -124,52 +124,53 @@ int main(int argc, char *argv[])
 		else
 			frags[i].seqno = frags[i-1].seqno + frags[i-1].length;
 	}
+	for(int i = 0; i < numPacks; ++i)
+	{
+    	/* Send the string to the server */
+    	if (sendto(sock, frags+i, length, 0, (struct sockaddr *)
+        	       &servAddr, sizeof(servAddr)) != length)
+    	{
+			char mess[56] = "sendto() sent a different number of bytes than expected";
+			DieWithError(mess);
+  		}
 
-    /* Send the string to the server */
-    if (sendto(sock, frags, length, 0, (struct sockaddr *)
-               &servAddr, sizeof(servAddr)) != length)
-    {
-		char mess[56] = "sendto() sent a different number of bytes than expected";
-		DieWithError(mess);
-  	}
-
-    /* Get a response */
+    	/* Get a response */
     
-    fromSize = sizeof(fromAddr);
-    alarm(TIMEOUT_SECS);        /* Set the timeout */
-    while ((respStringLen = recvfrom(sock, retBuffer, ECHOMAX, 0,
-           (struct sockaddr *) &fromAddr, &fromSize)) < 0)
-        if (errno == EINTR)     /* Alarm went off  */
-        {
-            if (tries < MAXTRIES)      /* incremented by signal handler */
-            {
-                printf("timed out, %d more tries...\n", MAXTRIES-tries);
-                if (sendto(sock, frags, length, 0, (struct sockaddr *)
-                            &servAddr, sizeof(servAddr)) != length)
-                {
-					char mess[17] = "sendto() failed";
+    	fromSize = sizeof(fromAddr);
+    	alarm(TIMEOUT_SECS);        /* Set the timeout */
+    	while ((respStringLen = recvfrom(sock, retBuffer, ECHOMAX, 0,
+        	   (struct sockaddr *) &fromAddr, &fromSize)) < 0)
+        	if (errno == EINTR)     /* Alarm went off  */
+        	{
+            	if (tries < MAXTRIES)      /* incremented by signal handler */
+            	{
+                	printf("timed out, %d more tries...\n", MAXTRIES-tries);
+                	if (sendto(sock, frags+i, length, 0, (struct sockaddr *)
+                    	        &servAddr, sizeof(servAddr)) != length)
+                	{
+						char mess[17] = "sendto() failed";
+						DieWithError(mess);
+                	}
+					alarm(TIMEOUT_SECS);
+            	} 
+            	else
+            	{
+					char mess[12] = "No Response";
 					DieWithError(mess);
-                }
-				alarm(TIMEOUT_SECS);
-            } 
-            else
-            {
-				char mess[12] = "No Response";
-				DieWithError(mess);
+				}
+        	} 
+        	else
+			{
+				char mess[18] = "recvfrom() failed";
+            	DieWithError(mess);
 			}
-        } 
-        else
-		{
-			char mess[18] = "recvfrom() failed";
-            DieWithError(mess);
-		}
-    /* recvfrom() got something --  cancel the timeout */
-    alarm(0);
+    	/* recvfrom() got something --  cancel the timeout */
+    	alarm(0);
 
-    /* null-terminate the received data */
-    retBuffer[respStringLen] = '\0';
-    printf("Received: %s\n", retBuffer);    /* Print the received data */
-    
+    	/* null-terminate the received data */
+    	retBuffer[respStringLen] = '\0';
+    	printf("Received: %s\n", retBuffer);    /* Print the received data */
+    }
     close(sock);
     exit(0);
 }
