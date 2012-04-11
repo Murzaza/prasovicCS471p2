@@ -46,7 +46,7 @@ int main(int argc, char *argv[])
     struct sigaction myAction;       /* For setting signal handler */
     char *servIP;                    /* IP address of server */
     int respStringLen;               /* Size of received datagram */
-	char retBuffer[4096];
+	char retBuffer[BSIZE];
 
 	unsigned int servPort, chunkSize, windowSize;
 	size_t length = sizeof(struct message);
@@ -68,7 +68,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 	printf("Inputs gathered correctly\n");
-	return 0;
 
     /* Create a best-effort datagram socket using UDP */
     if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
@@ -97,9 +96,10 @@ int main(int argc, char *argv[])
     servAddr.sin_family = AF_INET;
     servAddr.sin_addr.s_addr = inet_addr(servIP);  /* Server IP address */
     servAddr.sin_port = htons(servPort);       /* Server port */
+
 	/* Parsing out the message into packets */
-	int numPacks = 4096/chunkSize;
-	if(4096 % chunkSize != 0)
+	int numPacks = BSIZE / chunkSize;
+	if(BSIZE % chunkSize != 0)
 		numPacks++;
 
 	frags = new struct message[numPacks];
@@ -124,6 +124,11 @@ int main(int argc, char *argv[])
 		else
 			frags[i].seqno = frags[i-1].seqno + frags[i-1].length;
 	}
+	return 0;
+
+	//Loop through every packet and send them.
+	int sentOut = 0;
+
 	for(int i = 0; i < numPacks; ++i)
 	{
     	/* Send the string to the server */
@@ -171,6 +176,7 @@ int main(int argc, char *argv[])
     	retBuffer[respStringLen] = '\0';
     	printf("Received: %s\n", retBuffer);    /* Print the received data */
     }
+	delete [] frags;
     close(sock);
     exit(0);
 }
