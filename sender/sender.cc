@@ -1,3 +1,10 @@
+/*
+	Mirza Prasovic
+	CS 471 Spring 2012
+	Program 2
+
+	Sender programmer of the UDP protocol.
+*/
 #include <stdio.h>      /* for printf() and fprintf() */
 #include <sys/socket.h> /* for socket(), connect(), sendto(), and recvfrom() */
 #include <arpa/inet.h>  /* for sockaddr_in and inet_addr() */
@@ -24,7 +31,7 @@ struct message
 	int type;
 	int seqno;
 	int length;
-	char data[512];
+	char data[MAXCHUNK];
 };
 
 void DieWithError(char *errorMessage);   /* Error handling function */
@@ -33,18 +40,17 @@ void CatchAlarm(int ignored);            /* Handler for SIGALRM */
 int main(int argc, char *argv[])
 {
     int sock;                        /* Socket descriptor */
-    struct sockaddr_in echoServAddr; /* Echo server address */
+    struct sockaddr_in servAddr; /* Echo server address */
     struct sockaddr_in fromAddr;     /* Source address of echo */
-    unsigned short echoServPort;     /* Echo server port */
     unsigned int fromSize;           /* In-out of address size for recvfrom() */
     struct sigaction myAction;       /* For setting signal handler */
     char *servIP;                    /* IP address of server */
-    char *echoString;                /* String to send to echo server */
-    char echoBuffer[ECHOMAX+1];      /* Buffer for echo string */
-    int echoStringLen;               /* Length of string to echo */
     int respStringLen;               /* Size of received datagram */
+	char retBuffer[4096];
 
 	unsigned int servPort, chunkSize, windowSize;
+	size_t length = sizeof(struct message);
+	struct message *frags;
 	if(argc < 5 || argc > 5)
 	{
 		fprintf(stderr, "Usage: %s <Server IP> <Server Port> <Chunk Size> <Window Size>\n", argv[0]);
@@ -63,16 +69,6 @@ int main(int argc, char *argv[])
 	}
 	printf("Inputs gathered correctly\n");
 	return 0;
-    if ((echoStringLen = strlen(echoString)) > ECHOMAX)
-    {
-		char mess[19] = "Echo word too long";
-		DieWithError(mess);
-	}
-
-    if (argc == 4)
-        echoServPort = atoi(argv[3]);  /* Use given port, if any */
-    else
-        echoServPort = 7;  /* 7 is well-known port for echo service */
 
     /* Create a best-effort datagram socket using UDP */
     if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
@@ -97,14 +93,41 @@ int main(int argc, char *argv[])
 	}
 
     /* Construct the server address structure */
-    memset(&echoServAddr, 0, sizeof(echoServAddr));    /* Zero out structure */
-    echoServAddr.sin_family = AF_INET;
-    echoServAddr.sin_addr.s_addr = inet_addr(servIP);  /* Server IP address */
-    echoServAddr.sin_port = htons(echoServPort);       /* Server port */
+    memset(&servAddr, 0, sizeof(servAddr));    /* Zero out structure */
+    servAddr.sin_family = AF_INET;
+    servAddr.sin_addr.s_addr = inet_addr(servIP);  /* Server IP address */
+    servAddr.sin_port = htons(servPort);       /* Server port */
+	/* Parsing out the message into packets */
+	int numPacks = 4096/chunkSize;
+	if(4096 % chunkSize != 0)
+		numPacks++;
+
+	frags = new struct message[numPacks];
+	for(int i = 0; i < numPacks; ++i)
+	{
+		frags[i].type = 1;
+		//Getting message and length.
+		if(i != numPacks - 1)
+		{
+			strncpy(frags[i].data, buffer + (i*chunkSize), chunkSize);
+			frags[i].length = chunkSize;
+		}
+		else
+		{
+			strcpy(frags[i].data, buffer + (i*chunkSize));
+			frags[i].length = strlen(frags[i].data);
+		}
+		
+		//Seqno calculation.
+		if(i == 0)
+			frags[i].seqno = 0;
+		else
+			frags[i].seqno = frags[i-1].seqno + frags[i-1].length;
+	}
 
     /* Send the string to the server */
-    if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)
-               &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
+    if (sendto(sock, frags, length, 0, (struct sockaddr *)
+               &servAddr, sizeof(servAddr)) != length)
     {
 		char mess[56] = "sendto() sent a different number of bytes than expected";
 		DieWithError(mess);
@@ -114,15 +137,15 @@ int main(int argc, char *argv[])
     
     fromSize = sizeof(fromAddr);
     alarm(TIMEOUT_SECS);        /* Set the timeout */
-    while ((respStringLen = recvfrom(sock, echoBuffer, ECHOMAX, 0,
+    while ((respStringLen = recvfrom(sock, retBuffer, ECHOMAX, 0,
            (struct sockaddr *) &fromAddr, &fromSize)) < 0)
         if (errno == EINTR)     /* Alarm went off  */
         {
             if (tries < MAXTRIES)      /* incremented by signal handler */
             {
                 printf("timed out, %d more tries...\n", MAXTRIES-tries);
-                if (sendto(sock, echoString, echoStringLen, 0, (struct sockaddr *)
-                            &echoServAddr, sizeof(echoServAddr)) != echoStringLen)
+                if (sendto(sock, frags, length, 0, (struct sockaddr *)
+                            &servAddr, sizeof(servAddr)) != length)
                 {
 					char mess[17] = "sendto() failed";
 					DieWithError(mess);
@@ -144,8 +167,8 @@ int main(int argc, char *argv[])
     alarm(0);
 
     /* null-terminate the received data */
-    echoBuffer[respStringLen] = '\0';
-    printf("Received: %s\n", echoBuffer);    /* Print the received data */
+    retBuffer[respStringLen] = '\0';
+    printf("Received: %s\n", retBuffer);    /* Print the received data */
     
     close(sock);
     exit(0);
