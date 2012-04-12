@@ -20,7 +20,6 @@
 #define TIMEOUT_SECS    2       /* Seconds between retransmits */
 #define MAXTRIES        5       /* Tries before giving up */
 
-const unsigned int MAXCHUNK = 512;
 
 int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
 
@@ -41,10 +40,13 @@ int main(int argc, char *argv[])
     char *servIP;                    /* IP address of server */
     int respStringLen;               /* Size of received datagram */
 	char retBuffer[BSIZE];
-
+	
 	unsigned int servPort, chunkSize, windowSize;
 	size_t length = sizeof(struct message);
+	size_t ackSize = sizeof(struct ack);
 	struct message *frags;
+	struct ack ret;
+
 	if(argc < 5 || argc > 5)
 	{
 		fprintf(stderr, "Usage: %s <Server IP> <Server Port> <Chunk Size> <Window Size>\n", argv[0]);
@@ -118,11 +120,10 @@ int main(int argc, char *argv[])
 		else
 			frags[i].seqno = frags[i-1].seqno + frags[i-1].length;
 	}
-	return 0;
 
 	//Loop through every packet and send them.
 	int sentOut = 0;
-
+	
 	for(int i = 0; i < numPacks; ++i)
 	{
     	/* Send the string to the server */
@@ -137,7 +138,7 @@ int main(int argc, char *argv[])
     
     	fromSize = sizeof(fromAddr);
     	alarm(TIMEOUT_SECS);        /* Set the timeout */
-    	while ((respStringLen = recvfrom(sock, retBuffer, ECHOMAX, 0,
+    	while ((respStringLen = recvfrom(sock, &ret, ackSize, 0,
         	   (struct sockaddr *) &fromAddr, &fromSize)) < 0)
         	if (errno == EINTR)     /* Alarm went off  */
         	{
@@ -166,9 +167,10 @@ int main(int argc, char *argv[])
     	/* recvfrom() got something --  cancel the timeout */
     	alarm(0);
 
-    	/* null-terminate the received data */
+    	/* null-terminate the received data 
     	retBuffer[respStringLen] = '\0';
-    	printf("Received: %s\n", retBuffer);    /* Print the received data */
+    	printf("Received: %s\n", retBuffer);  Print the received data */
+		printf("---- RECEIVING ACK ackno %i\n", ret.ackno);
     }
 	delete [] frags;
     close(sock);
