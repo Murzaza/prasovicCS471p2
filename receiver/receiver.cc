@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     unsigned int cliAddrLen;         /* Length of incoming message */
     struct message retBuffer;        /* Buffer for echo string */
 	vector<message> retMess;
-	string finalOut;    
+	string finalOut = "";    
 	int recvMsgSize;                 /* Size of received message */
 
 	size_t messSize = sizeof(struct message);
@@ -63,7 +63,9 @@ int main(int argc, char *argv[])
 	    DieWithError(m);
   	}
 	int ackC = -1;
-    for (;;) /* Run forever */
+	bool one = false;
+    int skip = 512;
+	for (;;) /* Run forever */
     {
         /* Set the size of the in-out parameter */
         cliAddrLen = sizeof(clntAddr);
@@ -76,16 +78,26 @@ int main(int argc, char *argv[])
 		    DieWithError(m);
 		}
 
-        printf("Handling client %s\n", inet_ntoa(clntAddr.sin_addr));
-		ret.type = 2;
+        //printf("Handling client %s\n", inet_ntoa(clntAddr.sin_addr));
+		if(retBuffer.type != 4)
+			ret.type = 2;
+		else
+			ret.type = 8;
 		ret.ackno = retBuffer.seqno;
+		printf("---- RECEIVING %i\n", retBuffer.seqno);
+		printf("SENDING ACK %i\n", ret.ackno);
         /* Send received datagram back to the client */
-        if (sendto(sock, &ret, ackSize, 0, 
+        printf(" %i \t %i\n", retBuffer.seqno, skip);
+		if(retBuffer.seqno != skip)
+		{
+		if (sendto(sock, &ret, ackSize, 0, 
              (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
         {
 			char m[56] = "sendto() sent a different number of bytes than expected";
 		    DieWithError(m);
     	}
+		}else
+			skip = -10;
 	}
     /* NOT REACHED */
 }
