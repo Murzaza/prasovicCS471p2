@@ -20,31 +20,24 @@
 #include "structs.h"
 
 #define ECHOMAX         255     /* Longest string to echo */
-#define TIMEOUT_SECS    3       /* Seconds between retransmits */
+#define TIMEOUT_SECS    2       /* Seconds between retransmits */
 #define MAXTRIES        10       /* Tries before giving up */
 
-
 int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
-
-/*
-	The message format to send to receiver.
-*/
 
 void DieWithError(char *errorMessage);   /* Error handling function */
 void CatchAlarm(int ignored);            /* Handler for SIGALRM */
 
 int main(int argc, char *argv[])
 {
-    int sock;                        /* Socket descriptor */
-    struct sockaddr_in servAddr; /* Echo server address */
-    struct sockaddr_in fromAddr;     /* Source address of echo */
-    unsigned int fromSize;           /* In-out of address size for recvfrom() */
-    struct sigaction myAction;       /* For setting signal handler */
-    char *servIP;                    /* IP address of server */
-    int ackLen;               /* Size of received datagram */
-	char retBuffer[BSIZE];
-	
-	unsigned int servPort, chunkSize, windowSize;
+    int sock;                        				// Socket descriptor
+    struct sockaddr_in servAddr; 					// Echo server address 
+    struct sockaddr_in fromAddr;     				// Source address of echo 
+    unsigned int fromSize;           				// In-out of address size for recvfrom() 
+    struct sigaction myAction;       				// For setting signal handler 
+    char *servIP;                    				// IP address of server 
+    int ackLen;               						// Size of received datagram 
+	unsigned int servPort, chunkSize, windowSize; 	// Cmd line arguments.
 	size_t length = sizeof(struct message);
 	size_t ackSize = sizeof(struct ack);
 	struct message *frags;
@@ -52,17 +45,20 @@ int main(int argc, char *argv[])
 	std::map<int, bool> acks;
 	std::vector<int> nextAck;
 
+	//Command line argument checking.
 	if(argc < 5 || argc > 5)
 	{
 		fprintf(stderr, "Usage: %s <Server IP> <Server Port> <Chunk Size> <Window Size>\n", argv[0]);
 		exit(1);
 	}
 
-    servIP = argv[1];           /* First arg:  server IP address (dotted quad) */
+	//Assign the command line arguments to variables.
+    servIP = argv[1];           
 	servPort = atoi(argv[2]);
 	chunkSize = atoi(argv[3]);
 	windowSize = atoi(argv[4]);
-	
+
+	//Check to make sure the chunk size is under 512.
 	if (chunkSize > MAXCHUNK)
 	{
 		fprintf(stderr, "Error: Chunk size must be less than %u\n", MAXCHUNK);
@@ -136,6 +132,7 @@ int main(int argc, char *argv[])
 
 	while(receivedAcks < numPacks)
 	{
+		//Send out fragments until the whole window is filled.
 		while(withStanding < windowSize && sentOut < numPacks)
 		{
 			printf("SENDING %i\n", frags[sentOut].seqno);
@@ -148,12 +145,16 @@ int main(int argc, char *argv[])
 			withStanding++;
 		}
 		alarm(TIMEOUT_SECS);
+
+		//Check for a ack reply.
 		while((ackLen = recvfrom(sock, &ret, ackSize, 0, (struct sockaddr *) &fromAddr, &fromSize)) < 0)
 		{
+			//Alarm went off.
 			if(errno == EINTR)
 			{
 				if(tries < MAXTRIES)
 				{
+					//Send all the withstanding fragments out again.
 					for(int i = base; i < base+windowSize; ++i)
 					{
 						printf("SENDING %i\n", frags[i].seqno);
@@ -173,6 +174,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		alarm(0);
+		//If the ack we received was the next one to get.
 		if(nextAck[base] == ret.ackno)
 		{
 			receivedAcks++;
@@ -183,75 +185,54 @@ int main(int argc, char *argv[])
 			printf("---- RECEIVING ACK ackno %i\n", ret.ackno);
 		}
 	}
+
+	//Send up to 10 teardown messages to complete transfer.
 	message term = {4, -1, 0, ""};
-	//Send 10 of these
 	printf("SENDING TEARDOWN!\n");
-	sendto(sock, &term, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr));
-	
-	recvfrom(sock, &ret, ackSize, 0, (struct sockaddr *) &fromAddr, &fromSize);
+	if(sendto(sock, &term, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
+	{
+		char mess[56] = "sendto() sent a different number of bytes than expected";
+		DieWithError(mess);
+	}	
+	tries++;
+	alarm(TIMEOUT_SECS);
+
+	//Keep checking until we finally get a reply otherwise we end it.
+	while((ackLen = recvfrom(sock, &ret, ackSize, 0, (struct sockaddr *) &fromAddr, &fromSize)) < 0)
+	{
+		//The alarm went off.
+		if(errno == EINTR)
+		{
+			if(tries < MAXTRIES)
+			{
+				//Resend the message.
+				printf("SENDING TEARDOWN!\n");
+				if(sendto(sock, &term, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
+				{
+					char mess[56] = "sendto() sent a different number of bytes than expected";
+					DieWithError(mess);
+				}
+				alarm(TIMEOUT_SECS);
+			}
+			else
+			{
+				//Fail if the ack message wasn't received.
+				char m[25] = "Teardown message failed";
+				DieWithError(m);
+			}
+		}
+	}
+
+	//If we made it here. That means everything was sent successfully.
 	if(ret.type == 8)
 		printf("---- RECEIVING ACK TEARDOWN!\n");
 	else
 		printf("---- NOT RECEIVING ACK TEARDOWN!\n");
+	
 	//Ending now!!
 	delete [] frags;
 	close(sock);
 	exit(0);
-
-	for(int i = 0; i < numPacks; ++i)
-	{
-    	/* Send the string to the server */
-		printf("SENDING %i\n", frags[i].seqno);
-    	if (sendto(sock, frags+i, length, 0, (struct sockaddr *)
-        	       &servAddr, sizeof(servAddr)) != length)
-    	{
-			char mess[56] = "sendto() sent a different number of bytes than expected";
-			DieWithError(mess);
-  		}
-
-    	/* Get a response */
-    
-    	fromSize = sizeof(fromAddr);
-    	alarm(TIMEOUT_SECS);        /* Set the timeout */
-    	while ((ackLen = recvfrom(sock, &ret, ackSize, 0,
-        	   (struct sockaddr *) &fromAddr, &fromSize)) < 0)
-        	if (errno == EINTR)     /* Alarm went off  */
-        	{
-            	if (tries < MAXTRIES)      /* incremented by signal handler */
-            	{
-                	printf("timed out, %d more tries...\n", MAXTRIES-tries);
-                	printf("SENDING %i\n", frags[i].seqno);
-					if (sendto(sock, frags+i, length, 0, (struct sockaddr *)
-                    	        &servAddr, sizeof(servAddr)) != length)
-                	{
-						char mess[17] = "sendto() failed";
-						DieWithError(mess);
-                	}
-					alarm(TIMEOUT_SECS);
-            	} 
-            	else
-            	{
-					char mess[12] = "No Response";
-					DieWithError(mess);
-				}
-        	} 
-        	else
-			{
-				char mess[18] = "recvfrom() failed";
-            	DieWithError(mess);
-			}
-    	/* recvfrom() got something --  cancel the timeout */
-    	alarm(0);
-
-    	/* null-terminate the received data 
-    	retBuffer[ackLen] = '\0';
-    	printf("Received: %s\n", retBuffer);  Print the received data */
-		printf("---- RECEIVING ACK ackno %i\n", ret.ackno);
-    }
-	
-	delete [] frags;
-    close(sock);
-    exit(0);
 }
 
 void CatchAlarm(int ignored)     /* Handler for SIGALRM */

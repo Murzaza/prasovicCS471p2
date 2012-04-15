@@ -81,13 +81,14 @@ int main(int argc, char *argv[])
         //printf("Handling client %s\n", inet_ntoa(clntAddr.sin_addr));
 		if(retBuffer.type != 4)
 			ret.type = 2;
-		else
+		else{
 			ret.type = 8;
+			return 0;
+			}
 		ret.ackno = retBuffer.seqno;
 		printf("---- RECEIVING %i\n", retBuffer.seqno);
 		printf("SENDING ACK %i\n", ret.ackno);
         /* Send received datagram back to the client */
-        printf(" %i \t %i\n", retBuffer.seqno, skip);
 		if(retBuffer.seqno != skip)
 		{
 		if (sendto(sock, &ret, ackSize, 0, 
