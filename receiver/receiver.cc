@@ -18,6 +18,7 @@ int tries = 0;
 
 void DieWithError(char *errorMessage);  /* External error handling function */
 void CatchAlarm(int ignored);
+bool isLost(int lossRate);
 
 int main(int argc, char *argv[])
 {
@@ -38,6 +39,7 @@ int main(int argc, char *argv[])
 	int nextPkt = 0;
 	int lastAck = -1;
 	struct sigaction myAction;
+	srand(2839);
 	if (argc < 2)         /* Test for correct number of parameters */
     {
         fprintf(stderr,"Usage:  %s <UDP SERVER PORT> [<FAIL RATE>]\n", argv[0]);
@@ -89,13 +91,23 @@ int main(int argc, char *argv[])
         cliAddrLen = sizeof(clntAddr);
 
         /* Block until receive message from a client */
-        if ((recvMsgSize = recvfrom(sock, &retBuffer, messSize, 0,
-            (struct sockaddr *) &clntAddr, &cliAddrLen)) < 0)
+        while(isLost(failRate))
+			if ((recvMsgSize = recvfrom(sock, &retBuffer, messSize, 0,
+            	(struct sockaddr *) &clntAddr, &cliAddrLen)) < 0)
+        	{
+				close(sock);
+				char m[18]="recvfrom() failed";
+		    	DieWithError(m);
+			}
+		
+		if ((recvMsgSize = recvfrom(sock, &retBuffer, messSize, 0,
+           	(struct sockaddr *) &clntAddr, &cliAddrLen)) < 0)
         {
 			close(sock);
 			char m[18]="recvfrom() failed";
-		    DieWithError(m);
+		   	DieWithError(m);
 		}
+
 		printf("%i <-buffer:next-> %i\n", retBuffer.seqno, nextPkt);
 		if(retBuffer.seqno == nextPkt)
 		{	
@@ -177,6 +189,16 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+}
+
+bool isLost(int lossRate)
+{
+	int rv;
+	rv = rand() % 100;
+	if(rv < lossRate)
+		return true;
+	else
+		return false;
 }
 
 void CatchAlarm(int ignored)
