@@ -4,15 +4,20 @@
 #include <stdlib.h>     /* for atoi() and exit() */
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
+#include <signal.h>
+#include <errno.h>
 #include "structs.h"
 #include <vector>
 #include <string>
+#include <time.h>
 
 #define MAXSIZE 4096     /* Longest string to echo */
 
 using namespace std;
+int tries = 0;
 
 void DieWithError(char *errorMessage);  /* External error handling function */
+void CatchAlarm(int ignored);
 
 int main(int argc, char *argv[])
 {
@@ -30,7 +35,9 @@ int main(int argc, char *argv[])
 	struct sockaddr_in servAddr, clntAddr;
     struct ack ret;
 	int failRate = 0;
-
+	int nextPkt = 0;
+	int lastAck = -1;
+	struct sigaction myAction;
 	if (argc < 2)         /* Test for correct number of parameters */
     {
         fprintf(stderr,"Usage:  %s <UDP SERVER PORT> [<FAIL RATE>]\n", argv[0]);
@@ -49,7 +56,20 @@ int main(int argc, char *argv[])
 		char m[16] = "socket() failed";
 		DieWithError(m);
 	}
+	
+	myAction.sa_handler = CatchAlarm;
+	if(sigfillset(&myAction.sa_mask) < 0)
+	{
+		char m[20] = "sigfillset() failed";
+		DieWithError(m);
+	}
+	myAction.sa_flags = 0;
 
+	if(sigaction(SIGALRM, &myAction, 0) < 0)
+	{
+		char m[31] = "sigaction() failed for SIGALRM";
+		DieWithError(m);
+	}
     /* Construct local address structure */
     memset(&servAddr, 0, sizeof(servAddr));   /* Zero out structure */
     servAddr.sin_family = AF_INET;                /* Internet address family */
@@ -62,9 +82,7 @@ int main(int argc, char *argv[])
 		char m[14] = "bind() failed";
 	    DieWithError(m);
   	}
-	int ackC = -1;
-	bool one = false;
-    int skip = 512;
+
 	for (;;) /* Run forever */
     {
         /* Set the size of the in-out parameter */
@@ -74,31 +92,94 @@ int main(int argc, char *argv[])
         if ((recvMsgSize = recvfrom(sock, &retBuffer, messSize, 0,
             (struct sockaddr *) &clntAddr, &cliAddrLen)) < 0)
         {
+			close(sock);
 			char m[18]="recvfrom() failed";
 		    DieWithError(m);
 		}
+		printf("%i <-buffer:next-> %i\n", retBuffer.seqno, nextPkt);
+		if(retBuffer.seqno == nextPkt)
+		{	
+			//Calculate some variables.
+			finalOut = finalOut + retBuffer.data;
+			lastAck = retBuffer.seqno;
+			nextPkt += retBuffer.length;
+			printf("trueType %i\n", retBuffer.type);	
+			if(retBuffer.type == 4)
+			{
+				printf("TYPE 8\n");
+				ret.type = 8;
+				time_t start = time(NULL);
+				time_t end = time(NULL);
 
-        //printf("Handling client %s\n", inet_ntoa(clntAddr.sin_addr));
-		if(retBuffer.type != 4)
-			ret.type = 2;
-		else{
-			ret.type = 8;
-			return 0;
+				ret.ackno = lastAck;
+				if(sendto(sock, &ret, ackSize, 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
+				{
+					char m[56] = "sendto() sent a different number of bytes than expected";
+					DieWithError(m);
+				}
+				//alarm(2);
+				/*
+				while(end - start < 2)
+				{
+					while(recvfrom(sock, &retBuffer, messSize, 0, (struct sockaddr *) &clntAddr, &cliAddrLen) < 0);
+					{
+						if(errno == EINTR)
+						{
+							break;			
+						}
+					}	
+					if(retBuffer.type == 4)
+					{
+						if(sendto(sock, &ret, ackSize, 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
+						{
+							char m[56] = "sendto() sent a different number of bytes than expected";
+							DieWithError(m);
+						}
+					}
+					end = time(NULL);
+				}
+				*/
+				printf("LEAVING!\n");
+				lastAck = -1;
+				nextPkt = 0;
+				finalOut = "";
+				memset(&ret, 0, sizeof(ack));
 			}
-		ret.ackno = retBuffer.seqno;
-		printf("---- RECEIVING %i\n", retBuffer.seqno);
-		printf("SENDING ACK %i\n", ret.ackno);
-        /* Send received datagram back to the client */
-		if(retBuffer.seqno != skip)
+			else
+			{
+				puts("TYPE 2\n");
+				ret.type = 2;
+				ret.ackno = retBuffer.seqno;
+
+				//Create correct output.
+				printf("---- RECEIVING %i\n", retBuffer.seqno);
+				printf("SENDING ACK %i\n", ret.ackno);
+
+	        	// Send ack back to client.
+				if (sendto(sock, &ret, ackSize, 0, 
+    	         (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
+	        	{
+					close(sock);
+					char m[56] = "sendto() sent a different number of bytes than expected";
+		    		DieWithError(m);
+    			}
+			}
+		}
+		else
 		{
-		if (sendto(sock, &ret, ackSize, 0, 
-             (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
-        {
-			char m[56] = "sendto() sent a different number of bytes than expected";
-		    DieWithError(m);
-    	}
-		}else
-			skip = -10;
+			//Resend last ack sent.
+			printf("SENDING ACK %i\n", ret.ackno);
+			if(sendto(sock, &ret, ackSize, 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
+			{	
+				close(sock);
+				char m[56] = "sento() sent a different number of bytes than expected";
+				DieWithError(m);
+			}
+		}
 	}
-    /* NOT REACHED */
+}
+
+void CatchAlarm(int ignored)
+{
+	tries += 1;
 }

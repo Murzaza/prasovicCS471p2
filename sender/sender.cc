@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
 	}
 
 	//Send up to 10 teardown messages to complete transfer.
-	message term = {4, -1, 0, ""};
+	message term = {4, frags[numPacks-1].seqno+frags[numPacks-1].length, 0, ""};
 	printf("SENDING TEARDOWN!\n");
 	if(sendto(sock, &term, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
 	{
