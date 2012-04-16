@@ -108,27 +108,29 @@ int main(int argc, char *argv[])
 		   	DieWithError(m);
 		}
 
-		printf("%i <-buffer:next-> %i\n", retBuffer.seqno, nextPkt);
+		//printf("%i <-buffer:next-> %i\n", retBuffer.seqno, nextPkt);
 		if(retBuffer.seqno == nextPkt)
 		{	
 			//Calculate some variables.
 			finalOut = finalOut + retBuffer.data;
 			lastAck = retBuffer.seqno;
-			nextPkt += retBuffer.length;
-			printf("trueType %i\n", retBuffer.type);	
+			//nextPkt += retBuffer.length;
+			nextPkt += 1;
 			if(retBuffer.type == 4)
 			{
-				printf("TYPE 8\n");
 				ret.type = 8;
-				time_t start = time(NULL);
-				time_t end = time(NULL);
+				//time_t start = time(NULL);
+				//time_t end = time(NULL);
 
 				ret.ackno = lastAck;
+				printf("---- RECEIVING TEARDOWN\n");
+				printf("SENDING ACK TEARDOWN\n");
 				if(sendto(sock, &ret, ackSize, 0, (struct sockaddr *) &clntAddr, sizeof(clntAddr)) != ackSize)
 				{
 					char m[56] = "sendto() sent a different number of bytes than expected";
 					DieWithError(m);
 				}
+				sleep(7);
 				//alarm(2);
 				/*
 				while(end - start < 2)
@@ -151,7 +153,6 @@ int main(int argc, char *argv[])
 					end = time(NULL);
 				}
 				*/
-				printf("LEAVING!\n");
 				lastAck = -1;
 				nextPkt = 0;
 				finalOut = "";
@@ -159,7 +160,6 @@ int main(int argc, char *argv[])
 			}
 			else
 			{
-				puts("TYPE 2\n");
 				ret.type = 2;
 				ret.ackno = retBuffer.seqno;
 

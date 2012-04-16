@@ -20,7 +20,7 @@
 #include "structs.h"
 
 #define ECHOMAX         255     /* Longest string to echo */
-#define TIMEOUT_SECS    2       /* Seconds between retransmits */
+#define TIMEOUT_SECS    3       /* Seconds between retransmits */
 #define MAXTRIES        10       /* Tries before giving up */
 
 int tries=0;   /* Count of times sent - GLOBAL for signal-handler access */
@@ -114,12 +114,15 @@ int main(int argc, char *argv[])
 			strcpy(frags[i].data, buffer + (i*chunkSize));
 			frags[i].length = strlen(frags[i].data);
 		}
-		
-		//Seqno calculation.
+			
+		frags[i].seqno = i;
+
+		/*Seqno calculation.
 		if(i == 0)
 			frags[i].seqno = 0;
 		else
 			frags[i].seqno = frags[i-1].seqno + frags[i-1].length;
+		*/
 		acks[frags[i].seqno] = false;
 		nextAck.push_back(frags[i].seqno);
 	}
@@ -187,7 +190,11 @@ int main(int argc, char *argv[])
 	}
 
 	//Send up to 10 teardown messages to complete transfer.
-	message term = {4, frags[numPacks-1].seqno+frags[numPacks-1].length, 0, ""};
+	message term;
+	term.type = 4;
+	//term.seqno = frags[numPacks-1].seqno + frags[numPacks-1].length;
+	term.seqno = numPacks;
+	term.length = 0;
 	printf("SENDING TEARDOWN!\n");
 	if(sendto(sock, &term, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
 	{
