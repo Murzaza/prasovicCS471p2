@@ -12,10 +12,18 @@ Building:
 
 Running:
 	sender:
-		./sender <IP Address (Dotted Quad)> <Port No> <Chunk Size <=512> <Window Size>
+		./sender <IP Address (Dotted Quad)> <Port No> <Chunk Size < 512> <Window Size>
 	receiver:
 		./receiver <Port No> [<Fail Rate>]
 			-Fail Rate is an int from 0 to 100
 
-Notes:
+Limitations:
+	-When Sender times out and exits, receiver will just sit there waiting for input.
+	-I can't get sender to get the ack packets from receiver on multilab, but it works
+	 fine on my two home machines (Mac OS X 10.6.8, Ubuntu Linux 10.04 LTS), and a friend's
+	 machine (Ubuntu Linux 11.04). I would recommend running both a personal computer and
+	 not multilab.
+	 	-Commands ran:
+			./receiver 9900 20
+			./sender 127.0.0.1 9900 511 4
 	

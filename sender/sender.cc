@@ -64,7 +64,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Error: Chunk size must be less than %u\n", MAXCHUNK);
 		exit(1);
 	}
-	printf("Inputs gathered correctly\n");
 
     /* Create a best-effort datagram socket using UDP */
     if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
