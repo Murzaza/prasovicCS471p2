@@ -1,0 +1,21 @@
+Mirza Prasovic
+CS471 Spring 2012
+Programming Assignment
+
+Building:
+	sender:
+		cd sender/
+		make
+	receiver:
+		cd receiver/
+		make
+
+Running:
+	sender:
+		./sender <IP Address (Dotted Quad)> <Port No> <Chunk Size <=512> <Window Size>
+	receiver:
+		./receiver <Port No> [<Fail Rate>]
+			-Fail Rate is an int from 0 to 100
+
+Notes:
+	
