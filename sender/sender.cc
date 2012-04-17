@@ -160,11 +160,14 @@ int main(int argc, char *argv[])
 					//Send all the withstanding fragments out again.
 					for(int i = base; i < base+windowSize; ++i)
 					{
-						printf("SENDING %i\n", frags[i].seqno);
-						if(sendto(sock, frags+i, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
+						if(i < numPacks)
 						{
-							char mess[56] = "sendto() sent a different number of bytes than expected";
-							DieWithError(mess);
+							printf("SENDING %i\n", frags[i].seqno);
+							if(sendto(sock, frags+i, length, 0, (struct sockaddr *) &servAddr, sizeof(servAddr)) != length)
+							{
+								char mess[56] = "sendto() sent a different number of bytes than expected";
+								DieWithError(mess);
+							}
 						}
 					}
 					alarm(TIMEOUT_SECS);
@@ -185,7 +188,11 @@ int main(int argc, char *argv[])
 			base++;
 			tries = 0;
 			acks[ret.ackno] = true;
-			printf("---- RECEIVING ACK ackno %i\n", ret.ackno);
+			printf("---- RECEIVING ACK %i\n", ret.ackno);
+		}
+		else
+		{
+			printf("---- RECEIVING ACK %i\n", ret.ackno);
 		}
 	}
 
@@ -205,6 +212,8 @@ int main(int argc, char *argv[])
 	alarm(TIMEOUT_SECS);
 
 	//Keep checking until we finally get a reply otherwise we end it.
+	while(ret.type != 8)
+	{
 	while((ackLen = recvfrom(sock, &ret, ackSize, 0, (struct sockaddr *) &fromAddr, &fromSize)) < 0)
 	{
 		//The alarm went off.
@@ -235,7 +244,7 @@ int main(int argc, char *argv[])
 		printf("---- RECEIVING ACK TEARDOWN!\n");
 	else
 		printf("---- NOT RECEIVING ACK TEARDOWN!\n");
-	
+	}
 	//Ending now!!
 	delete [] frags;
 	close(sock);
